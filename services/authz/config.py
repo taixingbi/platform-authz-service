@@ -1,0 +1,46 @@
+"""Environment-driven configuration (M12). Same "config.py is the only
+place that reads os.environ" convention as bedrock-gateway-app's
+config.py.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return int(raw)
+
+
+@dataclass(frozen=True)
+class Settings:
+    aws_region: str
+    host: str
+    port: int
+    service_name: str
+    log_level: str
+
+    # Principal mapping (AWS_IAM/SigV4 path) -- same two-layer shape as
+    # bedrock-gateway-app's LayeredIamTenantResolver: a file (hand-
+    # configured, git/PR-reviewed) plus an optional DynamoDB overlay
+    # for onboarding-provisioned grants (M11). Read-only here -- writes
+    # stay owned by bedrock-gateway-app's onboarding/provisioning.py.
+    iam_tenants_path: str
+    provisioned_principal_mappings_table_name: str  # empty -> file-only
+
+
+def load_settings() -> Settings:
+    return Settings(
+        aws_region=os.environ.get("AWS_REGION", "us-east-1"),
+        host=os.environ.get("AUTHZ_HOST", "0.0.0.0"),
+        port=_env_int("AUTHZ_PORT", 8080),
+        service_name=os.environ.get("SERVICE_NAME", "authz-service"),
+        log_level=os.environ.get("LOG_LEVEL", "INFO"),
+        iam_tenants_path=os.environ.get("IAM_TENANTS_PATH", "policies/iam_tenants.yaml"),
+        provisioned_principal_mappings_table_name=os.environ.get(
+            "PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME", ""
+        ),
+    )
