@@ -57,8 +57,12 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
         return {"status": "ok"}
 
     @app.post("/v1/authorize", response_model=AuthorizeResponse)
-    async def authorize(body: AuthorizeRequest) -> AuthorizeResponse:
-        request_id = str(uuid.uuid4())
+    async def authorize(body: AuthorizeRequest, request: Request) -> AuthorizeResponse:
+        # Reuse the caller's request_id (HttpIamTenantResolver forwards
+        # its own) so this decision log line correlates with the
+        # gateway.chat/gateway.access lines for the SAME request, instead
+        # of minting an unrelated ID every time.
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         try:
             grant = iam_tenant_resolver.resolve(body.identity.subject)
         except AuthzError as exc:

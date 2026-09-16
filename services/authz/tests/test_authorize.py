@@ -134,6 +134,39 @@ class AuthorizeDecisionLoggingTests(unittest.TestCase):
         self.assertEqual(record.decision, "DENY")
         self.assertEqual(record.subject, "arn:aws:iam::123:role/unknown")
 
+    def test_honors_incoming_request_id_header(self):
+        """gateway-api's HttpIamTenantResolver forwards its own request_id
+        as this header so a decision here correlates with the caller's
+        gateway.chat/gateway.access log lines -- a fresh uuid4 would sever
+        that link."""
+        client = _app(
+            {
+                "arn:aws:iam::123:role/x": IamPrincipalGrant(
+                    tenant_id="search", application_id="search-dev", roles=["developer"]
+                )
+            }
+        )
+
+        with self.assertLogs("authz-service", level="INFO") as cm:
+            client.post(
+                "/v1/authorize",
+                headers={"x-request-id": "req-abc-123"},
+                json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+
+        self.assertEqual(cm.records[0].request_id, "req-abc-123")
+
+    def test_generates_request_id_when_header_absent(self):
+        client = _app({})
+
+        with self.assertLogs("authz-service", level="INFO") as cm:
+            client.post(
+                "/v1/authorize",
+                json={"identity": {"subject": "arn:aws:iam::123:role/unknown", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+
+        self.assertTrue(cm.records[0].request_id)
+
 
 if __name__ == "__main__":
     unittest.main()
