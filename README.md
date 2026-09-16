@@ -60,6 +60,27 @@ poetry run python -m services.authz.main
 poetry run python -m unittest discover -s services/authz/tests -t .
 ```
 
+## First deploy's real gotcha: ECR immutable tags + partial failure
+
+The very first "Deploy to dev" run failed on `iam:PassRole` (the
+deploy role could pass the ECS execution role but not the task role —
+fixed in `bedrock-gateway-infra`'s `environments/global`). The image
+had already built and pushed successfully *before* that failure, so
+re-running the same CI job hit ECR's immutable-tag protection:
+`tag invalid: ... already exists ... and cannot be overwritten`
+(`modules/ecr`'s lifecycle policy only expires `sha-*`-tagged images,
+it doesn't make them mutable). CI can't recover from this on its own —
+re-running always tries to rebuild+push the same commit's tag.
+
+Fixed by hand: `aws ecs register-task-definition` combining the
+already-pushed image with the (by-then-fixed) task definition's real
+env vars, then `aws ecs update-service` to roll it out — the same
+"the artifact already exists, just point the service at it" recovery
+`bedrock-gateway-app` and `bedrock-gateway-portal` needed for similar
+mid-flight infra races earlier in this platform's history. If a
+deploy ever fails *after* the image push step, don't just re-run the
+job — check whether the image already exists in ECR first.
+
 ## Integration with bedrock-gateway-app
 
 `bedrock-gateway-app`'s `auth/aws_iam.py` gets a new
