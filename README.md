@@ -1,4 +1,4 @@
-# bedrock-authz-service
+# platform-authz-service
 
 M12 for the [bedrock-gateway](../bedrock-gateway-app) platform (see
 `plan.md` Section 5). A standalone authorization service (PDP —

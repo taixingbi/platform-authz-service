@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "bedrock-authz-service"
+name = "platform-authz-service"
 version = "0.1.0"
 description = "Authorization service (PDP) for the Bedrock Gateway platform -- principal mapping + RBAC, called internally by bedrock-gateway-app"
 authors = []
