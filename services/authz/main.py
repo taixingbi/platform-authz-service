@@ -8,6 +8,7 @@ Run under uvicorn directly (what the Dockerfile does):
 """
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 
 from fastapi import FastAPI
@@ -18,6 +19,7 @@ from starlette.responses import JSONResponse
 from .config import Settings, load_settings
 from .models import AuthorizeRequest, AuthorizeResponse
 from .resolver import AuthzError, DynamoDbIamTenantResolver, FileIamTenantResolver, IamTenantResolver, LayeredIamTenantResolver
+from .telemetry.logging import configure_logging, get_logger, log_event
 
 # The one real rule this MVP enforces: is the principal known at all.
 # ABAC / a real policy engine (Section 5.1's "policy engine" box) is
@@ -30,6 +32,8 @@ POLICY_ID = "iam-principal-mapping-v1"
 
 def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optional[IamTenantResolver] = None) -> FastAPI:
     settings = settings or load_settings()
+    configure_logging(settings.service_name, settings.log_level)
+    logger = get_logger(settings.service_name)
 
     if iam_tenant_resolver is None:
         file_resolver = FileIamTenantResolver(settings.iam_tenants_path)
@@ -54,11 +58,23 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
 
     @app.post("/v1/authorize", response_model=AuthorizeResponse)
     async def authorize(body: AuthorizeRequest) -> AuthorizeResponse:
+        request_id = str(uuid.uuid4())
         try:
             grant = iam_tenant_resolver.resolve(body.identity.subject)
         except AuthzError as exc:
+            log_event(
+                logger, "INFO", "authorize decision",
+                request_id=request_id, decision="DENY", subject=body.identity.subject,
+                action=body.action, policy_id=POLICY_ID,
+            )
             return AuthorizeResponse(decision="DENY", policy_id=POLICY_ID, reason=str(exc))
 
+        log_event(
+            logger, "INFO", "authorize decision",
+            request_id=request_id, decision="ALLOW", subject=body.identity.subject,
+            action=body.action, tenant_id=grant.tenant_id, application_id=grant.application_id,
+            policy_id=POLICY_ID,
+        )
         return AuthorizeResponse(
             decision="ALLOW",
             tenant_id=grant.tenant_id,

@@ -93,5 +93,47 @@ class AuthorizeTests(unittest.TestCase):
         self.assertEqual(resp.json(), {"status": "ok"})
 
 
+class AuthorizeDecisionLoggingTests(unittest.TestCase):
+    """Every /v1/authorize call logs one structured decision line --
+    the audit trail a PDP needs (who, what tenant, ALLOW/DENY, which
+    policy decided it), without ever logging the request's context dict
+    (nothing sensitive is expected there, but it's not this service's
+    business to echo it into logs)."""
+
+    def test_allow_is_logged(self):
+        client = _app(
+            {
+                "arn:aws:iam::123:role/x": IamPrincipalGrant(
+                    tenant_id="search", application_id="search-dev", roles=["developer"]
+                )
+            }
+        )
+
+        with self.assertLogs("authz-service", level="INFO") as cm:
+            client.post(
+                "/v1/authorize",
+                json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+
+        record = cm.records[0]
+        self.assertEqual(record.decision, "ALLOW")
+        self.assertEqual(record.subject, "arn:aws:iam::123:role/x")
+        self.assertEqual(record.tenant_id, "search")
+        self.assertTrue(record.request_id)
+
+    def test_deny_is_logged(self):
+        client = _app({})
+
+        with self.assertLogs("authz-service", level="INFO") as cm:
+            client.post(
+                "/v1/authorize",
+                json={"identity": {"subject": "arn:aws:iam::123:role/unknown", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+
+        record = cm.records[0]
+        self.assertEqual(record.decision, "DENY")
+        self.assertEqual(record.subject, "arn:aws:iam::123:role/unknown")
+
+
 if __name__ == "__main__":
     unittest.main()
