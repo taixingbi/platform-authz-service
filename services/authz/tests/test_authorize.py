@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from starlette.testclient import TestClient
@@ -198,6 +199,76 @@ class AuthorizeTracingTests(unittest.TestCase):
         mock_extract.assert_called_once()
         (carrier,), _ = mock_extract.call_args
         self.assertEqual(carrier.get("traceparent"), traceparent)
+
+
+class AuthorizeSessionIdTests(unittest.TestCase):
+    """session_id, when gateway-api's HttpIamTenantResolver forwards
+    one, ends up on the decision log line (see telemetry/logging.py's
+    session_id_ctx) -- never invented when absent, unlike request_id.
+
+    session_id isn't an explicit log_event() field (see main.py) --
+    JsonFormatter reads it from session_id_ctx at format() time, which
+    only reflects the right value *during* the request (main.py resets
+    it in a finally before client.post() returns), so these tests
+    attach a real JsonFormatter-backed handler and capture its actual
+    output live, the same pattern bedrock-gateway-app's
+    PiiSafeLoggingTests uses -- asserting on the LogRecord after the
+    fact (as assertLogs does) would see the contextvar already reset.
+    """
+
+    def _capture_formatted_output(self, post_fn):
+        import io
+        import logging
+
+        from ..telemetry.logging import JsonFormatter
+
+        captured = io.StringIO()
+        handler = logging.StreamHandler(captured)
+        handler.setFormatter(JsonFormatter())
+        root = logging.getLogger()
+        root.addHandler(handler)
+        try:
+            post_fn()
+        finally:
+            root.removeHandler(handler)
+        return captured.getvalue()
+
+    def test_session_id_is_logged_when_present(self):
+        client = _app(
+            {
+                "arn:aws:iam::123:role/x": IamPrincipalGrant(
+                    tenant_id="search", application_id="search-dev", roles=["developer"]
+                )
+            }
+        )
+
+        output = self._capture_formatted_output(
+            lambda: client.post(
+                "/v1/authorize",
+                headers={"x-session-id": "sess-abc-123"},
+                json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+        )
+
+        lines = [json.loads(line) for line in output.splitlines() if line.strip()]
+        decision_lines = [line for line in lines if line.get("message") == "authorize decision"]
+        self.assertEqual(len(decision_lines), 1)
+        self.assertEqual(decision_lines[0]["session_id"], "sess-abc-123")
+
+    def test_session_id_absent_from_log_when_not_sent(self):
+        client = _app({})
+
+        output = self._capture_formatted_output(
+            lambda: client.post(
+                "/v1/authorize",
+                json={"identity": {"subject": "arn:aws:iam::123:role/unknown", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+        )
+
+        lines = [json.loads(line) for line in output.splitlines() if line.strip()]
+        decision_lines = [line for line in lines if line.get("message") == "authorize decision"]
+        self.assertEqual(len(decision_lines), 1)
+        self.assertNotIn("session_id", decision_lines[0])
 
 
 if __name__ == "__main__":

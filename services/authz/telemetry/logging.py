@@ -2,20 +2,31 @@
 
 Ported from bedrock-gateway-app's services/gateway/telemetry/logging.py --
 same shape (one JSON object per line: ts -> level -> service -> environment
--> logger -> request_id -> <event-specific fields> -> message -> error) so
-an authorize decision here and a chat request log over there can be
-cross-referenced by request_id, and both services' log lines carry the
-same service/environment identity fields for filtering across
-CloudWatch log groups.
+-> logger -> request_id -> trace_id -> span_id -> session_id ->
+<event-specific fields> -> message -> error) so an authorize decision
+here and a chat request log over there can be cross-referenced by
+request_id/trace_id, and both services' log lines carry the same
+service/environment identity fields for filtering across CloudWatch
+log groups.
+
+trace_id/span_id are pulled automatically from whatever OTel span is
+current when the log call happens (telemetry/otel.py) -- omitted
+entirely when there is none, never fabricated. session_id comes from
+`session_id_ctx`, set by main.py's /v1/authorize handler from the
+inbound X-Session-Id header (gateway-api's HttpIamTenantResolver
+forwards its own) -- empty/absent when the caller didn't send one, no
+invented value.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import sys
 import time
 from typing import Any, Optional
 
+from opentelemetry import trace
 
 _RESERVED_LOGRECORD_KEYS = {
     "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
@@ -23,6 +34,8 @@ _RESERVED_LOGRECORD_KEYS = {
     "created", "msecs", "relativeCreated", "thread", "threadName",
     "processName", "process", "message", "taskName",
 }
+
+session_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("authz_session_id", default="")
 
 
 class JsonFormatter(logging.Formatter):
@@ -50,6 +63,16 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "request_id": request_id,
         }
+
+        span_context = trace.get_current_span().get_span_context()
+        if span_context.is_valid:
+            ordered["trace_id"] = format(span_context.trace_id, "032x")
+            ordered["span_id"] = format(span_context.span_id, "016x")
+
+        session_id = session_id_ctx.get()
+        if session_id:
+            ordered["session_id"] = session_id
+
         ordered.update(extra)
         ordered["message"] = record.getMessage()
         if error is not None:
