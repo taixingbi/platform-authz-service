@@ -37,6 +37,11 @@ class Settings:
     iam_tenants_path: str
     provisioned_principal_mappings_table_name: str  # empty -> file-only
 
+    # Empty -> ConsoleSpanExporter (dev default); set -> OTLP HTTP to a
+    # real backend. Same "seam + fallback" shape as bedrock-gateway-app's
+    # own config.py -- see telemetry/otel.py.
+    otel_exporter_otlp_endpoint: str
+
 
 def load_settings() -> Settings:
     return Settings(
@@ -51,4 +56,5 @@ def load_settings() -> Settings:
         provisioned_principal_mappings_table_name=os.environ.get(
             "PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME", ""
         ),
+        otel_exporter_otlp_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
     )

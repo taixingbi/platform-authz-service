@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from opentelemetry.propagate import extract
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -20,6 +21,7 @@ from .config import Settings, load_settings
 from .models import AuthorizeRequest, AuthorizeResponse
 from .resolver import AuthzError, DynamoDbIamTenantResolver, FileIamTenantResolver, IamTenantResolver, LayeredIamTenantResolver
 from .telemetry.logging import configure_logging, get_logger, log_event
+from .telemetry.otel import configure_tracing, set_span_attributes
 
 # The one real rule this MVP enforces: is the principal known at all.
 # ABAC / a real policy engine (Section 5.1's "policy engine" box) is
@@ -36,6 +38,7 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
         settings.service_name, settings.log_level, service=settings.service, environment=settings.environment
     )
     logger = get_logger(settings.service_name)
+    tracer = configure_tracing(settings.service_name, otlp_endpoint=settings.otel_exporter_otlp_endpoint or None)
 
     if iam_tenant_resolver is None:
         file_resolver = FileIamTenantResolver(settings.iam_tenants_path)
@@ -65,30 +68,42 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
         # gateway.chat/gateway.access lines for the SAME request, instead
         # of minting an unrelated ID every time.
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
-        try:
-            grant = iam_tenant_resolver.resolve(body.identity.subject)
-        except AuthzError as exc:
+        # W3C traceparent, when gateway-api sent one (HttpIamTenantResolver
+        # always does) -- makes this span a CHILD of the caller's span
+        # (same trace_id), not the root of an unrelated trace.
+        parent_context = extract(dict(request.headers))
+
+        with tracer.start_as_current_span("authorize", context=parent_context) as span:
+            set_span_attributes(span, request_id=request_id, subject=body.identity.subject, action=body.action)
+            try:
+                grant = iam_tenant_resolver.resolve(body.identity.subject)
+            except AuthzError as exc:
+                log_event(
+                    logger, "INFO", "authorize decision",
+                    request_id=request_id, decision="DENY", subject=body.identity.subject,
+                    action=body.action, policy_id=POLICY_ID,
+                )
+                set_span_attributes(span, decision="DENY", policy_id=POLICY_ID)
+                return AuthorizeResponse(decision="DENY", policy_id=POLICY_ID, reason=str(exc))
+
             log_event(
                 logger, "INFO", "authorize decision",
-                request_id=request_id, decision="DENY", subject=body.identity.subject,
-                action=body.action, policy_id=POLICY_ID,
+                request_id=request_id, decision="ALLOW", subject=body.identity.subject,
+                action=body.action, tenant_id=grant.tenant_id, application_id=grant.application_id,
+                policy_id=POLICY_ID,
             )
-            return AuthorizeResponse(decision="DENY", policy_id=POLICY_ID, reason=str(exc))
-
-        log_event(
-            logger, "INFO", "authorize decision",
-            request_id=request_id, decision="ALLOW", subject=body.identity.subject,
-            action=body.action, tenant_id=grant.tenant_id, application_id=grant.application_id,
-            policy_id=POLICY_ID,
-        )
-        return AuthorizeResponse(
-            decision="ALLOW",
-            tenant_id=grant.tenant_id,
-            application_id=grant.application_id,
-            roles=grant.roles,
-            policy_id=POLICY_ID,
-            reason="principal is mapped",
-        )
+            set_span_attributes(
+                span, decision="ALLOW", tenant_id=grant.tenant_id, application_id=grant.application_id,
+                policy_id=POLICY_ID,
+            )
+            return AuthorizeResponse(
+                decision="ALLOW",
+                tenant_id=grant.tenant_id,
+                application_id=grant.application_id,
+                roles=grant.roles,
+                policy_id=POLICY_ID,
+                reason="principal is mapped",
+            )
 
     @app.get("/v1/grants")
     async def list_grants() -> dict:

@@ -168,5 +168,37 @@ class AuthorizeDecisionLoggingTests(unittest.TestCase):
         self.assertTrue(cm.records[0].request_id)
 
 
+class AuthorizeTracingTests(unittest.TestCase):
+    """gateway-api's HttpIamTenantResolver always injects a W3C
+    traceparent header -- extracting it here (instead of ignoring it)
+    is what makes this service's span a CHILD of the caller's, landing
+    in the same trace instead of an unrelated one."""
+
+    def test_extracts_incoming_traceparent(self):
+        from unittest.mock import patch
+
+        from .. import main as main_module
+
+        client = _app(
+            {
+                "arn:aws:iam::123:role/x": IamPrincipalGrant(
+                    tenant_id="search", application_id="search-dev", roles=["developer"]
+                )
+            }
+        )
+        traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+        with patch.object(main_module, "extract", wraps=main_module.extract) as mock_extract:
+            client.post(
+                "/v1/authorize",
+                headers={"traceparent": traceparent},
+                json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+            )
+
+        mock_extract.assert_called_once()
+        (carrier,), _ = mock_extract.call_args
+        self.assertEqual(carrier.get("traceparent"), traceparent)
+
+
 if __name__ == "__main__":
     unittest.main()
