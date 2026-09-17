@@ -36,4 +36,8 @@ ENV AUTHZ_HOST=0.0.0.0 \
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).status==200 else 1)"
 
-CMD ["uvicorn", "services.authz.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# --no-access-log: /v1/authorize already logs a structured decision
+# line per request (main.py); /healthz and /v1/grants don't need one --
+# Uvicorn's own plain-text access log would just be noise, dominated by
+# healthz pings every few seconds.
+CMD ["uvicorn", "services.authz.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
