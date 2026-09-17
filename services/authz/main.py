@@ -90,17 +90,18 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
                 except AuthzError as exc:
                     log_event(
                         logger, "INFO", "authorize decision",
-                        request_id=request_id, decision="DENY", subject=body.identity.subject,
-                        action=body.action, policy_id=POLICY_ID,
+                        request_id=request_id,
+                        subject=body.identity.subject,
+                        action=body.action, policy_id=POLICY_ID, decision="DENY",
                     )
                     set_span_attributes(span, decision="DENY", policy_id=POLICY_ID)
                     return AuthorizeResponse(decision="DENY", policy_id=POLICY_ID, reason=str(exc))
 
                 log_event(
                     logger, "INFO", "authorize decision",
-                    request_id=request_id, decision="ALLOW", subject=body.identity.subject,
-                    action=body.action, tenant_id=grant.tenant_id, application_id=grant.application_id,
-                    policy_id=POLICY_ID,
+                    request_id=request_id,
+                    subject=body.identity.subject, tenant_id=grant.tenant_id, application_id=grant.application_id,
+                    action=body.action, policy_id=POLICY_ID, decision="ALLOW",
                 )
                 set_span_attributes(
                     span, decision="ALLOW", tenant_id=grant.tenant_id, application_id=grant.application_id,
