@@ -1,11 +1,12 @@
 """Structured JSON logging for authz-service.
 
 Ported from bedrock-gateway-app's services/gateway/telemetry/logging.py --
-same shape (one JSON object per line: ts -> level -> logger -> request_id
--> <event-specific fields> -> message -> error) so an authorize decision
-here and a chat request log over there can be cross-referenced by
-request_id, and so both services' CloudWatch log groups are greppable the
-same way.
+same shape (one JSON object per line: ts -> level -> service -> environment
+-> logger -> request_id -> <event-specific fields> -> message -> error) so
+an authorize decision here and a chat request log over there can be
+cross-referenced by request_id, and both services' log lines carry the
+same service/environment identity fields for filtering across
+CloudWatch log groups.
 """
 from __future__ import annotations
 
@@ -27,6 +28,11 @@ _RESERVED_LOGRECORD_KEYS = {
 class JsonFormatter(logging.Formatter):
     """Renders a LogRecord as one ordered JSON object per line."""
 
+    def __init__(self, *, service: str = "", environment: str = "") -> None:
+        super().__init__()
+        self._service = service
+        self._environment = environment
+
     def format(self, record: logging.LogRecord) -> str:
         extra = {
             k: v
@@ -39,6 +45,8 @@ class JsonFormatter(logging.Formatter):
         ordered: dict[str, Any] = {
             "ts": _iso_ts(record.created),
             "level": record.levelname,
+            "service": self._service,
+            "environment": self._environment,
             "logger": record.name,
             "request_id": request_id,
         }
@@ -58,8 +66,14 @@ def _iso_ts(epoch_seconds: float) -> str:
     )
 
 
-def configure_logging(service_name: str, level: str = "INFO") -> None:
+def configure_logging(
+    service_name: str, level: str = "INFO", *, service: str = "", environment: str = ""
+) -> None:
     """Configure the root logger to emit structured JSON on stdout.
+
+    `service_name` names the logger whose level this sets -- unrelated
+    to `service`/`environment`, the fixed identity fields stamped onto
+    every emitted line (see module docstring).
 
     Idempotent -- safe to call more than once (e.g. once from app startup,
     once from a test fixture).
@@ -70,7 +84,7 @@ def configure_logging(service_name: str, level: str = "INFO") -> None:
     root.handlers = [h for h in root.handlers if not isinstance(h, _AuthzStreamHandler)]
 
     handler = _AuthzStreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
+    handler.setFormatter(JsonFormatter(service=service, environment=environment))
     root.addHandler(handler)
 
     logging.getLogger(service_name).setLevel(level.upper())

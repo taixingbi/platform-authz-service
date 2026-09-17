@@ -23,6 +23,12 @@ class Settings:
     service_name: str
     log_level: str
 
+    # Identity fields stamped onto every structured JSON log line -- see
+    # telemetry/logging.py's module docstring. Distinct from
+    # service_name, which names the logger to set the level on.
+    service: str
+    environment: str
+
     # Principal mapping (AWS_IAM/SigV4 path) -- same two-layer shape as
     # bedrock-gateway-app's LayeredIamTenantResolver: a file (hand-
     # configured, git/PR-reviewed) plus an optional DynamoDB overlay
@@ -38,6 +44,8 @@ def load_settings() -> Settings:
         host=os.environ.get("AUTHZ_HOST", "0.0.0.0"),
         port=_env_int("AUTHZ_PORT", 8080),
         service_name=os.environ.get("SERVICE_NAME", "authz-service"),
+        service=os.environ.get("SERVICE", "platform-authz-service"),
+        environment=os.environ.get("ENVIRONMENT", "dev"),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
         iam_tenants_path=os.environ.get("IAM_TENANTS_PATH", "policies/iam_tenants.yaml"),
         provisioned_principal_mappings_table_name=os.environ.get(

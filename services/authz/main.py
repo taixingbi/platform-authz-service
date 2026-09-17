@@ -32,7 +32,9 @@ POLICY_ID = "iam-principal-mapping-v1"
 
 def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optional[IamTenantResolver] = None) -> FastAPI:
     settings = settings or load_settings()
-    configure_logging(settings.service_name, settings.log_level)
+    configure_logging(
+        settings.service_name, settings.log_level, service=settings.service, environment=settings.environment
+    )
     logger = get_logger(settings.service_name)
 
     if iam_tenant_resolver is None:
