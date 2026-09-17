@@ -2,12 +2,11 @@
 
 Ported from bedrock-gateway-app's services/gateway/telemetry/logging.py --
 same shape (one JSON object per line: ts -> level -> service -> environment
--> logger -> request_id -> trace_id -> span_id -> session_id ->
-<event-specific fields> -> message -> error) so an authorize decision
-here and a chat request log over there can be cross-referenced by
-request_id/trace_id, and both services' log lines carry the same
-service/environment identity fields for filtering across CloudWatch
-log groups.
+-> logger -> message -> request_id -> trace_id -> span_id -> session_id ->
+<event-specific fields> -> error) so an authorize decision here and a
+chat request log over there can be cross-referenced by request_id/
+trace_id, and both services' log lines carry the same service/
+environment identity fields for filtering across CloudWatch log groups.
 
 trace_id/span_id are pulled automatically from whatever OTel span is
 current when the log call happens (telemetry/otel.py) -- omitted
@@ -61,6 +60,7 @@ class JsonFormatter(logging.Formatter):
             "service": self._service,
             "environment": self._environment,
             "logger": record.name,
+            "message": record.getMessage(),
             "request_id": request_id,
         }
 
@@ -74,7 +74,6 @@ class JsonFormatter(logging.Formatter):
             ordered["session_id"] = session_id
 
         ordered.update(extra)
-        ordered["message"] = record.getMessage()
         if error is not None:
             ordered["error"] = error
         elif record.exc_info:
