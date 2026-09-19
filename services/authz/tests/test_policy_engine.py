@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from ..policy_engine import (
+    DEFAULT_DENY_POLICY_ID,
     DEFAULT_POLICY_ID,
     DEFAULT_POLICY_VERSION,
     PolicyRule,
@@ -42,6 +43,59 @@ class EvaluateNoRulesTests(unittest.TestCase):
         self.assertEqual(decision.decision, "ALLOW")
         self.assertEqual(decision.policy_id, DEFAULT_POLICY_ID)
         self.assertEqual(decision.policy_version, DEFAULT_POLICY_VERSION)
+
+    def test_default_allow_true_is_the_implicit_default(self):
+        """No default_allow kwarg at all -- same as explicitly True,
+        confirming this is opt-in-to-deny, not a breaking default
+        change for every existing caller."""
+        decision = evaluate([], tenant_id="acme", roles=["developer"], action="llm.invoke")
+        self.assertEqual(decision.decision, "ALLOW")
+
+
+class EvaluateDefaultDenyTests(unittest.TestCase):
+    """Plan section 35.17: default_allow=False, a regulated
+    production environment's Settings.default_allow_unmatched."""
+
+    def test_no_matching_rule_denies_when_default_allow_is_false(self):
+        decision = evaluate(
+            [], tenant_id="acme", roles=["developer"], action="llm.invoke", default_allow=False,
+        )
+
+        self.assertEqual(decision.decision, "DENY")
+        self.assertEqual(decision.policy_id, DEFAULT_DENY_POLICY_ID)
+        self.assertEqual(decision.policy_version, DEFAULT_POLICY_VERSION)
+
+    def test_an_explicit_allow_rule_still_wins_over_default_deny(self):
+        """default_allow only controls the NO-MATCH fallback -- an
+        explicit rule, of either effect, always takes precedence."""
+        rule = PolicyRule(rule_id="allow-developer", version=1, effect="ALLOW", roles_any_of=["developer"])
+
+        decision = evaluate(
+            [rule], tenant_id="acme", roles=["developer"], action="llm.invoke", default_allow=False,
+        )
+
+        self.assertEqual(decision.decision, "ALLOW")
+        self.assertEqual(decision.policy_id, "allow-developer")
+
+    def test_an_explicit_deny_rule_still_wins_over_default_allow(self):
+        rule = PolicyRule(rule_id="deny-contractor", version=1, effect="DENY", roles_any_of=["contractor"])
+
+        decision = evaluate(
+            [rule], tenant_id="acme", roles=["contractor"], action="llm.invoke", default_allow=True,
+        )
+
+        self.assertEqual(decision.decision, "DENY")
+        self.assertEqual(decision.policy_id, "deny-contractor")
+
+    def test_non_matching_rule_still_falls_through_to_default_deny(self):
+        rule = PolicyRule(rule_id="allow-manager", version=1, effect="ALLOW", roles_any_of=["manager"])
+
+        decision = evaluate(
+            [rule], tenant_id="acme", roles=["developer"], action="llm.invoke", default_allow=False,
+        )
+
+        self.assertEqual(decision.decision, "DENY")
+        self.assertEqual(decision.policy_id, DEFAULT_DENY_POLICY_ID)
 
 
 class EvaluateActionMatchTests(unittest.TestCase):

@@ -43,6 +43,18 @@ class Settings:
     # before policy_engine.py existed).
     authz_rules_path: str
 
+    # Plan section 35.17 (P0 production hardening): what a KNOWN,
+    # correctly-resolved principal gets when no configured rule
+    # matches their request at all. True (default) preserves this
+    # service's original behavior -- migration-friendly, since
+    # rolling out policy_engine.py/authz_rules.yaml shouldn't
+    # retroactively deny every tenant/action nobody has written a
+    # rule for yet. A regulated production environment should set
+    # this false: "known identity" and "authorized identity" are not
+    # the same thing, and an unmatched request should be denied, not
+    # silently allowed through a default nobody explicitly wrote.
+    default_allow_unmatched: bool
+
     # Empty -> ConsoleSpanExporter (dev default); set -> OTLP HTTP to a
     # real backend. Same "seam + fallback" shape as bedrock-gateway-app's
     # own config.py -- see telemetry/otel.py.
@@ -63,5 +75,6 @@ def load_settings() -> Settings:
             "PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME", ""
         ),
         authz_rules_path=os.environ.get("AUTHZ_RULES_PATH", "policies/authz_rules.yaml"),
+        default_allow_unmatched=os.environ.get("AUTHZ_DEFAULT_ALLOW", "true").lower() == "true",
         otel_exporter_otlp_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
     )

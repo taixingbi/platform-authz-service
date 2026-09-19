@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import unittest
 
@@ -25,10 +26,11 @@ class FakeResolver:
         return dict(self._grants)
 
 
-def _app(grants, authz_rules=None):
-    app = create_app(
-        settings=load_settings(), iam_tenant_resolver=FakeResolver(grants), authz_rules=authz_rules
-    )
+def _app(grants, authz_rules=None, **settings_overrides):
+    settings = load_settings()
+    if settings_overrides:
+        settings = dataclasses.replace(settings, **settings_overrides)
+    app = create_app(settings=settings, iam_tenant_resolver=FakeResolver(grants), authz_rules=authz_rules)
     return TestClient(app)
 
 
@@ -395,6 +397,61 @@ class PolicyEngineWiringTests(unittest.TestCase):
         body = resp.json()
         self.assertEqual(body["decision"], "DENY")
         self.assertEqual(body["policy_id"], "iam-principal-mapping-v1")
+
+
+class DefaultAllowUnmatchedWiringTests(unittest.TestCase):
+    """Plan section 35.17: confirms Settings.default_allow_unmatched
+    (AUTHZ_DEFAULT_ALLOW) actually reaches evaluate()'s default_allow
+    param through the real /v1/authorize handler, not just unit-tested
+    against evaluate() directly (test_policy_engine.py owns that)."""
+
+    def test_default_allow_false_denies_a_known_principal_with_no_matching_rule(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[],
+            default_allow_unmatched=False,
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "DENY")
+        self.assertEqual(body["policy_id"], "default-deny-no-matching-rule-v1")
+
+    def test_default_allow_true_is_unaffected_by_this_setting(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[],
+            default_allow_unmatched=True,
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "ALLOW")
+        self.assertEqual(body["policy_id"], "default-allow-known-principal-v1")
+
+    def test_default_allow_false_does_not_override_an_explicit_allow_rule(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[PolicyRule(rule_id="allow-developer", version=1, effect="ALLOW", roles_any_of=["developer"])],
+            default_allow_unmatched=False,
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "ALLOW")
+        self.assertEqual(body["policy_id"], "allow-developer")
 
 
 if __name__ == "__main__":

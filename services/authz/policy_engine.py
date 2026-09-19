@@ -52,6 +52,12 @@ def classification_rank(value: Optional[str]) -> Optional[int]:
 DEFAULT_POLICY_ID = "default-allow-known-principal-v1"
 DEFAULT_POLICY_VERSION = 1
 
+# Plan section 35.17 (P0 production hardening): the fail-closed
+# counterpart to DEFAULT_POLICY_ID above -- what a known principal
+# gets instead, in an environment where Settings.default_allow_unmatched
+# is False. See evaluate()'s own docstring.
+DEFAULT_DENY_POLICY_ID = "default-deny-no-matching-rule-v1"
+
 
 @dataclass(frozen=True)
 class PolicyRule:
@@ -151,12 +157,28 @@ def evaluate(
     action: str,
     resource_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
+    default_allow: bool = True,
 ) -> PolicyDecision:
-    """First matching rule (by descending priority) wins. No match ->
-    default-allow-known-principal, same fallback this service already
-    had before this module existed -- a caller that never sends
-    resource/context, or whose identity matches no configured rule,
-    sees identical behavior to before."""
+    """First matching rule (by descending priority) wins, regardless of
+    `default_allow` -- an explicit rule always controls; this only
+    changes what happens when NO rule matches at all.
+
+    `default_allow=True` (default): default-allow-known-principal, the
+    fallback this service already had before this module existed -- a
+    caller that never sends resource/context, or whose identity
+    matches no configured rule, sees identical behavior to before.
+    Migration-friendly: introducing authz_rules.yaml shouldn't
+    retroactively deny every tenant/action nobody has written a rule
+    for yet.
+
+    `default_allow=False` (plan section 35.17, a regulated production
+    environment's Settings.default_allow_unmatched): an unmatched
+    request is DENIED, not allowed through a default nobody explicitly
+    wrote. "Known identity" (the principal resolved to a real tenant)
+    is not the same thing as "authorized identity" (a rule actually
+    grants this action) -- conflating them is exactly the gap this
+    parameter closes.
+    """
     context = context or {}
     for rule in rules:
         if _rule_matches(rule, tenant_id=tenant_id, roles=roles, action=action, resource_id=resource_id, context=context):
@@ -166,9 +188,16 @@ def evaluate(
                 policy_version=rule.version,
                 reason=f"matched rule '{rule.rule_id}' (priority {rule.priority})",
             )
+    if default_allow:
+        return PolicyDecision(
+            decision="ALLOW",
+            policy_id=DEFAULT_POLICY_ID,
+            policy_version=DEFAULT_POLICY_VERSION,
+            reason="no matching rule -- default allow for a known principal",
+        )
     return PolicyDecision(
-        decision="ALLOW",
-        policy_id=DEFAULT_POLICY_ID,
+        decision="DENY",
+        policy_id=DEFAULT_DENY_POLICY_ID,
         policy_version=DEFAULT_POLICY_VERSION,
-        reason="no matching rule -- default allow for a known principal",
+        reason="no matching rule -- default deny (regulated production, plan section 35.17)",
     )

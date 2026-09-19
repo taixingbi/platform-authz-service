@@ -117,6 +117,7 @@ def create_app(
                     action=body.action,
                     resource_id=body.resource.id if body.resource else None,
                     context=body.context,
+                    default_allow=settings.default_allow_unmatched,
                 )
 
                 log_event(
