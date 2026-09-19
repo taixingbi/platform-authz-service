@@ -17,11 +17,24 @@ the verified token's own claims (`bedrock-gateway-app`'s
 extract for it yet, so `POST /v1/authorize` only accepts
 `auth_type: "aws_iam"`.
 
-There is no real ABAC or policy-engine logic here beyond "is this
-principal known" — this platform has no ABAC rules anywhere today to
-port, and this service doesn't fabricate any. `policy_id` in every
-response names the actual rule applied (`iam-principal-mapping-v1`),
-not a placeholder for rules that don't exist.
+Real versioned rule evaluation now exists (`services/authz/
+policy_engine.py`, plan section 35.4): a priority-ordered list of
+`PolicyRule`s (each with `action`, `tenant_id`, `roles_any_of`,
+`denied_resource_ids`, `max_data_classification`, `priority`),
+first-match-wins, loaded from `policies/authz_rules.yaml`. A resolved,
+known principal whose request matches no rule falls through to a
+configurable default -- `default-allow-known-principal-v1` (the
+migration-friendly default) or, when `AUTHZ_DEFAULT_ALLOW=false` (a
+regulated production environment, plan section 35.17),
+`default-deny-no-matching-rule-v1` instead: "known identity" and
+"authorized identity" are not the same thing, and an unmatched
+request in prod should be denied, not silently allowed through a
+default nobody explicitly wrote. `bedrock-gateway-app`'s own gateway
+now makes a real, resource/context-carrying call into this engine
+after the requested model is resolved (plan section 35.16), not just
+the identity-only call at authentication time -- so `resource`/
+`context`-scoped rules fire against real traffic, not only this
+service's own tests.
 
 ## API
 
@@ -41,10 +54,19 @@ POST /v1/authorize
   "tenant_id": "search",
   "application_id": "search-dev",
   "roles": ["developer"],
-  "policy_id": "iam-principal-mapping-v1",
-  "reason": "principal is mapped"
+  "policy_id": "default-allow-known-principal-v1",
+  "policy_version": 1,
+  "reason": "no matching rule -- default allow for a known principal"
 }
 ```
+
+`policy_id` names whichever rule (or default) actually produced the
+decision: a custom rule's own id, `default-allow-known-principal-v1`
+/ `default-deny-no-matching-rule-v1` for the no-match fallback (see
+above), or `iam-principal-mapping-v1` specifically for the "principal
+isn't mapped to a tenant at all" case -- a genuinely different kind
+of decision from a policy-engine rule match, since there's no
+tenant_id/roles yet to evaluate rules against.
 
 `GET /v1/grants` — every configured principal -> grant (file +
 onboarding-provisioned DynamoDB, if configured), for
