@@ -67,6 +67,60 @@ jobs:
         if: always()
         run: docker rm -f authz-ci
 
+  # Plan section 35.9 (P2 production hardening) -- same reasoning as
+  # bedrock-gateway-app's own copy of these jobs: NOT in deploy-dev's
+  # `needs:`, findings land in the Security tab, a severity threshold
+  # becoming deploy-blocking is a deliberate follow-up.
+  codeql:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3
+
+  pip-audit:
+    name: Dependency scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install 'poetry==2.1.4'
+          poetry install --with dev
+      - name: Export requirements from poetry.lock
+        run: poetry export --with dev -f requirements.txt -o requirements-audit.txt --without-hashes
+      - name: pip-audit
+        run: pip install pip-audit && pip-audit -r requirements-audit.txt --desc
+
+  trivy:
+    name: Container scan (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t authz-service:trivy-scan .
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: authz-service:trivy-scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
   deploy-dev:
     name: Deploy to dev
     needs: [test, docker]
