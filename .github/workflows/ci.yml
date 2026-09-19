@@ -124,10 +124,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build -t authz-service:trivy-scan .
-      # v0.28.0, not 0.28.0 -- this action's tags are v-prefixed;
-      # the bare-version form doesn't resolve. Live-verified in CI
-      # ("unable to find version `0.28.0`").
-      - uses: aquasecurity/trivy-action@v0.28.0
+      # v0.28.0 itself resolves (fixed the bare-"0.28.0" tag-prefix
+      # bug) but then fails: it internally pins
+      # aquasecurity/setup-trivy@v0.2.1, a tag since deleted upstream
+      # ("unable to resolve action... unable to find version
+      # `v0.2.1`" -- live-verified, confirmed via the GitHub API that
+      # setup-trivy's oldest remaining tag is v0.2.6). v0.36.0 pins
+      # setup-trivy by commit SHA (not a mutable tag), avoiding the
+      # same class of breakage again.
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: authz-service:trivy-scan
           format: sarif
