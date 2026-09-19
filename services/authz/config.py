@@ -37,6 +37,12 @@ class Settings:
     iam_tenants_path: str
     provisioned_principal_mappings_table_name: str  # empty -> file-only
 
+    # Plan section 35.4 -- versioned PDP rules. Empty/missing file
+    # means no rules (every decision falls through to the
+    # default-allow-known-principal behavior this service already had
+    # before policy_engine.py existed).
+    authz_rules_path: str
+
     # Empty -> ConsoleSpanExporter (dev default); set -> OTLP HTTP to a
     # real backend. Same "seam + fallback" shape as bedrock-gateway-app's
     # own config.py -- see telemetry/otel.py.
@@ -56,5 +62,6 @@ def load_settings() -> Settings:
         provisioned_principal_mappings_table_name=os.environ.get(
             "PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME", ""
         ),
+        authz_rules_path=os.environ.get("AUTHZ_RULES_PATH", "policies/authz_rules.yaml"),
         otel_exporter_otlp_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
     )

@@ -5,6 +5,7 @@ from starlette.testclient import TestClient
 
 from ..config import load_settings
 from ..main import create_app
+from ..policy_engine import PolicyRule
 from ..resolver import IamPrincipalGrant
 
 
@@ -24,8 +25,10 @@ class FakeResolver:
         return dict(self._grants)
 
 
-def _app(grants):
-    app = create_app(settings=load_settings(), iam_tenant_resolver=FakeResolver(grants))
+def _app(grants, authz_rules=None):
+    app = create_app(
+        settings=load_settings(), iam_tenant_resolver=FakeResolver(grants), authz_rules=authz_rules
+    )
     return TestClient(app)
 
 
@@ -269,6 +272,129 @@ class AuthorizeSessionIdTests(unittest.TestCase):
         decision_lines = [line for line in lines if line.get("message") == "authorize decision"]
         self.assertEqual(len(decision_lines), 1)
         self.assertNotIn("session_id", decision_lines[0])
+
+
+class PolicyEngineWiringTests(unittest.TestCase):
+    """Plan section 35.4: confirms policy_engine.evaluate() is actually
+    wired into POST /v1/authorize, not just unit-tested in isolation
+    (test_policy_engine.py owns the engine's own logic)."""
+
+    def test_known_principal_with_no_rules_gets_default_policy_id(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[],
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "ALLOW")
+        self.assertEqual(body["policy_id"], "default-allow-known-principal-v1")
+        self.assertEqual(body["policy_version"], 1)
+
+    def test_rule_deny_by_resource_id_is_enforced(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[
+                PolicyRule(
+                    rule_id="deny-bad-model", version=3, effect="DENY", action="llm.invoke",
+                    denied_resource_ids=["bad-model"],
+                )
+            ],
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={
+                "identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"},
+                "action": "llm.invoke",
+                "resource": {"type": "model", "id": "bad-model"},
+            },
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "DENY")
+        self.assertEqual(body["policy_id"], "deny-bad-model")
+        self.assertEqual(body["policy_version"], 3)
+
+    def test_rule_allows_a_different_resource_id(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[
+                PolicyRule(
+                    rule_id="deny-bad-model", version=1, effect="DENY", action="llm.invoke",
+                    denied_resource_ids=["bad-model"],
+                )
+            ],
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={
+                "identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"},
+                "action": "llm.invoke",
+                "resource": {"type": "model", "id": "good-model"},
+            },
+        )
+
+        self.assertEqual(resp.json()["decision"], "ALLOW")
+
+    def test_rule_deny_by_data_classification_is_enforced(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[
+                PolicyRule(
+                    rule_id="deny-phi", version=1, effect="DENY", action="llm.invoke",
+                    max_data_classification="internal",
+                )
+            ],
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={
+                "identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"},
+                "action": "llm.invoke",
+                "context": {"data_classification": "phi"},
+            },
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "DENY")
+        self.assertEqual(body["policy_id"], "deny-phi")
+
+    def test_role_scoped_rule_is_enforced(self):
+        client = _app(
+            {"arn:aws:iam::123:role/x": IamPrincipalGrant(tenant_id="search", application_id="a", roles=["developer"])},
+            authz_rules=[
+                PolicyRule(rule_id="deny-developer-invoke", version=1, effect="DENY", roles_any_of=["developer"])
+            ],
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={"identity": {"subject": "arn:aws:iam::123:role/x", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+        )
+
+        self.assertEqual(resp.json()["decision"], "DENY")
+
+    def test_unknown_principal_still_denied_before_any_rule_evaluation(self):
+        client = _app(
+            {},
+            authz_rules=[PolicyRule(rule_id="allow-everything", version=1, effect="ALLOW", action="*")],
+        )
+
+        resp = client.post(
+            "/v1/authorize",
+            json={"identity": {"subject": "arn:aws:iam::123:role/unknown", "auth_type": "aws_iam"}, "action": "llm.invoke"},
+        )
+
+        body = resp.json()
+        self.assertEqual(body["decision"], "DENY")
+        self.assertEqual(body["policy_id"], "iam-principal-mapping-v1")
 
 
 if __name__ == "__main__":

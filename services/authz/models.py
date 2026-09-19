@@ -36,4 +36,9 @@ class AuthorizeResponse(BaseModel):
     application_id: Optional[str] = None
     roles: List[str] = Field(default_factory=list)
     policy_id: str
+    # Plan section 35.4 -- which version of `policy_id`'s rule produced
+    # this decision (services/authz/policy_engine.py's PolicyRule.version).
+    # 1 for the fixed identity-resolution policies (principal unknown,
+    # default-allow-known-principal) that predate real rule versioning.
+    policy_version: int = 1
     reason: str

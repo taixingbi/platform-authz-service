@@ -1,0 +1,48 @@
+# Versioned PDP rules (plan section 35.4). First matching rule (by
+# descending priority) wins; no match falls through to
+# default-allow-known-principal (services/authz/policy_engine.py's
+# DEFAULT_POLICY_ID) -- the same behavior this service had before this
+# file existed.
+#
+# Honest scope note (see policy_engine.py's module docstring): today's
+# real gateway-api traffic sends action="llm.invoke" with no resource/
+# context at all (the authorize() call happens during authentication,
+# before the requested model is resolved) -- neither rule below fires
+# against real traffic yet, since both key on resource/context. Both
+# are real and tested (this service's own tests, and a caller that
+# sends resource/context explicitly), demonstrating the engine
+# actually works -- wiring gateway-api to send resource/context is a
+# separate, not-yet-built integration step (would need an
+# authorization call after model resolution, not just at
+# authentication time).
+
+authz_rules:
+  # Mirrors bedrock-gateway-app's own model_registry.yaml BLOCKED
+  # entry for this model (plan section 34.5) -- demonstrates a rule
+  # actually operating at the resource/context layer, not just
+  # identity, and shows why centralizing this here matters once more
+  # than one service (not just the Bedrock gateway) needs the same
+  # governance decision enforced consistently.
+  deny-deprecated-model-deepseek-r1:
+    version: 1
+    effect: DENY
+    action: "llm.invoke"
+    denied_resource_ids:
+      - "us.deepseek.r1-v1:0"
+    priority: 100
+
+  # A real cross-cutting governance rule that doesn't belong to any
+  # one model -- PHI/PII data in a prod environment requires a
+  # manager-or-above principal, regardless of which model is targeted.
+  require-manager-for-phi-in-prod:
+    version: 1
+    effect: DENY
+    action: "llm.invoke"
+    max_data_classification: "internal"
+    priority: 50
+    # (roles_any_of intentionally omitted here -- this rule's condition
+    # is purely the data-classification check; a *different*, lower-
+    # priority ALLOW rule would be how a manager-role exception gets
+    # layered in, once this platform has more than one rule per action
+    # to compose. Left as a single DENY rule for a clear, honest
+    # example rather than a contrived multi-rule composition.)

@@ -9,7 +9,7 @@ Run under uvicorn directly (what the Dockerfile does):
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -19,20 +19,23 @@ from starlette.responses import JSONResponse
 
 from .config import Settings, load_settings
 from .models import AuthorizeRequest, AuthorizeResponse
+from .policy_engine import PolicyRule, evaluate, load_rules_from_yaml
 from .resolver import AuthzError, DynamoDbIamTenantResolver, FileIamTenantResolver, IamTenantResolver, LayeredIamTenantResolver
 from .telemetry.logging import configure_logging, get_logger, log_event, session_id_ctx
 from .telemetry.otel import configure_tracing, set_span_attributes
 
-# The one real rule this MVP enforces: is the principal known at all.
-# ABAC / a real policy engine (Section 5.1's "policy engine" box) is
-# intentionally NOT faked here -- there are no ABAC rules anywhere in
-# this platform today to port, and claiming otherwise would be
-# dishonest. This is the same "scope down, don't fabricate" call M9
-# made for canary/rollback.
-POLICY_ID = "iam-principal-mapping-v1"
+# Identity-resolution failure has its own fixed policy id -- a
+# genuinely different kind of decision from a policy_engine.py rule
+# match (the principal isn't even mapped to a tenant yet, so there's
+# no tenant_id/roles to evaluate rules against).
+UNKNOWN_PRINCIPAL_POLICY_ID = "iam-principal-mapping-v1"
 
 
-def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optional[IamTenantResolver] = None) -> FastAPI:
+def create_app(
+    settings: Optional[Settings] = None,
+    iam_tenant_resolver: Optional[IamTenantResolver] = None,
+    authz_rules: Optional[List[PolicyRule]] = None,
+) -> FastAPI:
     settings = settings or load_settings()
     configure_logging(
         settings.service_name, settings.log_level, service=settings.service, environment=settings.environment
@@ -52,6 +55,9 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
             )
         else:
             iam_tenant_resolver = file_resolver
+
+    if authz_rules is None:
+        authz_rules = load_rules_from_yaml(settings.authz_rules_path)
 
     app = FastAPI(title="Bedrock Authorization Service")
     app.state.settings = settings
@@ -92,28 +98,47 @@ def create_app(settings: Optional[Settings] = None, iam_tenant_resolver: Optiona
                         logger, "INFO", "authorize decision",
                         request_id=request_id,
                         subject=body.identity.subject,
-                        action=body.action, policy_id=POLICY_ID, decision="DENY",
+                        action=body.action, policy_id=UNKNOWN_PRINCIPAL_POLICY_ID, decision="DENY",
                     )
-                    set_span_attributes(span, decision="DENY", policy_id=POLICY_ID)
-                    return AuthorizeResponse(decision="DENY", policy_id=POLICY_ID, reason=str(exc))
+                    set_span_attributes(span, decision="DENY", policy_id=UNKNOWN_PRINCIPAL_POLICY_ID)
+                    return AuthorizeResponse(
+                        decision="DENY", policy_id=UNKNOWN_PRINCIPAL_POLICY_ID, policy_version=1, reason=str(exc)
+                    )
+
+                # Plan section 35.4: real rule evaluation, not just "is
+                # the principal known" -- resource/context only
+                # actually influence anything for a caller that sends
+                # them (see policy_engine.py's module docstring on
+                # gateway-api's current call site not doing so yet).
+                decision = evaluate(
+                    authz_rules,
+                    tenant_id=grant.tenant_id,
+                    roles=grant.roles,
+                    action=body.action,
+                    resource_id=body.resource.id if body.resource else None,
+                    context=body.context,
+                )
 
                 log_event(
                     logger, "INFO", "authorize decision",
                     request_id=request_id,
                     subject=body.identity.subject, tenant_id=grant.tenant_id, application_id=grant.application_id,
-                    action=body.action, policy_id=POLICY_ID, decision="ALLOW",
+                    action=body.action, policy_id=decision.policy_id, policy_version=decision.policy_version,
+                    decision=decision.decision,
                 )
                 set_span_attributes(
-                    span, decision="ALLOW", tenant_id=grant.tenant_id, application_id=grant.application_id,
-                    policy_id=POLICY_ID,
+                    span, decision=decision.decision, tenant_id=grant.tenant_id,
+                    application_id=grant.application_id, policy_id=decision.policy_id,
+                    policy_version=decision.policy_version,
                 )
                 return AuthorizeResponse(
-                    decision="ALLOW",
+                    decision=decision.decision,
                     tenant_id=grant.tenant_id,
                     application_id=grant.application_id,
                     roles=grant.roles,
-                    policy_id=POLICY_ID,
-                    reason="principal is mapped",
+                    policy_id=decision.policy_id,
+                    policy_version=decision.policy_version,
+                    reason=decision.reason,
                 )
         finally:
             session_id_ctx.reset(session_token)
