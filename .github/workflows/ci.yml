@@ -120,6 +120,14 @@ jobs:
     permissions:
       security-events: write
       contents: read
+      # Same gap as the codeql job's actions: read comment above --
+      # upload-sarif hits the identical workflow-run telemetry call
+      # analyze does. Live-verified separately here: without it, this
+      # job fails on plain "Resource not accessible by integration"
+      # with no code-scanning-disabled text at all, unlike the codeql
+      # job's failure on this same (private) repo -- a distinct,
+      # fixable gap, not the GHAS-not-purchased blocker.
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - name: Build image
