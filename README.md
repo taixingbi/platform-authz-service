@@ -82,6 +82,26 @@ poetry run python -m services.authz.main
 poetry run python -m unittest discover -s services/authz/tests -t .
 ```
 
+## Infra & CI
+
+This repo owns two independent Terraform roots, each with its own
+state and its own `fmt-validate`/`plan`/`apply-dev` CI jobs
+(`.github/workflows/terraform.yml`, `dev` auto-applies on every push
+to `main`, matching every other repo in this platform):
+
+- `environments/dev/` — the real ECS/ALB service, security groups, and
+  ACM cert (issued from `platform-foundation`'s shared Private CA).
+- `ci_identity/` — this repo's own GitHub Actions IAM roles
+  (`gha-authz-deploy-dev`/`-prod`, `gha-authz-infra-plan`,
+  `gha-authz-infra-apply-dev`). Added 2026-09-21 as part of a
+  platform-wide Terraform-ownership migration: these roles used to be
+  defined centrally in `platform-foundation`, moved here via
+  `terraform import` (never deleted/recreated, so the ARNs and this
+  repo's own GitHub Environment variables never changed). `gha-authz-
+  infra-apply-dev`'s own policy is scoped to manage only
+  `gha-authz-*`-named roles (including itself) -- it can't touch any
+  other repo's roles.
+
 ## First deploy's real gotcha: ECR immutable tags + partial failure
 
 The very first "Deploy to dev" run failed on `iam:PassRole` (the

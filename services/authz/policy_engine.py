@@ -73,7 +73,7 @@ class PolicyRule:
     # condition is triggered (see _matches_resource_condition).
     denied_resource_ids: List[str] = field(default_factory=list)
     max_data_classification: Optional[str] = None
-    priority: int = 0  # higher evaluated first among rules with equal specificity
+    priority: int = 0  # higher evaluated first; ties keep YAML order (see load_rules_from_yaml's stable sort)
 
 
 @dataclass(frozen=True)
