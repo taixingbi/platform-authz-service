@@ -12,7 +12,7 @@ match falls through to a default-allow-known-principal decision
 (same behavior this service already had, now the explicit fallback
 rather than the only rule).
 
-Honest scope note, not hidden: `bedrock-gateway-app`'s own
+Honest scope note, not hidden: `bedrock-runtime-gateway-app`'s own
 `HttpIamTenantResolver.resolve()` call happens during Stage 1
 (authentication), before the requested model is even resolved
 (Stage 4c) -- so today's real traffic sends `action="llm.invoke"`
@@ -30,7 +30,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-# Same table bedrock-gateway-app's routing/model_registry.py and
+# Same table bedrock-runtime-gateway-app's routing/model_registry.py and
 # policy/validation.py use -- kept as an independent literal here
 # (this service has no dependency on that repo), same "hand-kept in
 # sync, documented as a real limitation" tradeoff those already accept.

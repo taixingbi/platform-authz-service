@@ -1,6 +1,6 @@
 """OpenTelemetry tracing for authz-service.
 
-Ported from bedrock-gateway-app's services/gateway/telemetry/otel.py --
+Ported from bedrock-runtime-gateway-app's services/gateway/telemetry/otel.py --
 same shape (console exporter by default, OTLP HTTP when
 OTEL_EXPORTER_OTLP_ENDPOINT is set) so both services' tracing setup and
 CloudWatch output are identical.
@@ -35,7 +35,7 @@ def configure_tracing(service_name: str, *, otlp_endpoint: Optional[str] = None)
 
             exporter: Any = OTLPSpanExporter(endpoint=otlp_endpoint)
         else:
-            # Same "one compact line per span" fix as bedrock-gateway-app's
+            # Same "one compact line per span" fix as bedrock-runtime-gateway-app's
             # otel.py -- the default formatter's ~30-line pretty-print
             # gets split by the awslogs driver into that many separate,
             # individually-useless CloudWatch events per span.

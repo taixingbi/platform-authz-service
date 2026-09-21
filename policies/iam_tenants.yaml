@@ -1,6 +1,6 @@
 # ============================================================
 # COPY -- not the source of truth. Canonical copy lives in
-# github.com/taixingbi/bedrock-gateway-policies (environments/dev/).
+# github.com/taixingbi/platform-policy-definitions (environments/dev/).
 # Sync by running scripts/sync-policies.sh against a checkout of
 # that repo. This copy exists only so `docker build` here keeps
 # working during the app/infra/policies repo split -- once the

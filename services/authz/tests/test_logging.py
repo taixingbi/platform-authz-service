@@ -8,7 +8,7 @@ from ..telemetry.logging import JsonFormatter
 class JsonFormatterIdentityFieldsTests(unittest.TestCase):
     """Every structured log line carries fixed service/environment
     identity fields (see telemetry/logging.py's module docstring) so an
-    authorize decision here can be traced alongside bedrock-gateway-app's
+    authorize decision here can be traced alongside bedrock-runtime-gateway-app's
     own request logs without already knowing which log group either
     came from."""
 

@@ -1,5 +1,5 @@
 """Environment-driven configuration (M12). Same "config.py is the only
-place that reads os.environ" convention as bedrock-gateway-app's
+place that reads os.environ" convention as bedrock-runtime-gateway-app's
 config.py.
 """
 from __future__ import annotations
@@ -30,10 +30,10 @@ class Settings:
     environment: str
 
     # Principal mapping (AWS_IAM/SigV4 path) -- same two-layer shape as
-    # bedrock-gateway-app's LayeredIamTenantResolver: a file (hand-
+    # bedrock-runtime-gateway-app's LayeredIamTenantResolver: a file (hand-
     # configured, git/PR-reviewed) plus an optional DynamoDB overlay
     # for onboarding-provisioned grants (M11). Read-only here -- writes
-    # stay owned by bedrock-gateway-app's onboarding/provisioning.py.
+    # stay owned by bedrock-runtime-gateway-app's onboarding/provisioning.py.
     iam_tenants_path: str
     provisioned_principal_mappings_table_name: str  # empty -> file-only
 
@@ -56,7 +56,7 @@ class Settings:
     default_allow_unmatched: bool
 
     # Empty -> ConsoleSpanExporter (dev default); set -> OTLP HTTP to a
-    # real backend. Same "seam + fallback" shape as bedrock-gateway-app's
+    # real backend. Same "seam + fallback" shape as bedrock-runtime-gateway-app's
     # own config.py -- see telemetry/otel.py.
     otel_exporter_otlp_endpoint: str
 

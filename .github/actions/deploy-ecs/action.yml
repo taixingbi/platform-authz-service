@@ -2,8 +2,8 @@ name: Deploy to ECS
 description: >
   Build the authz-service image, push it to ECR tagged with the commit
   SHA, and roll it out to the given ECS service by registering a new
-  task definition revision. Same pattern as bedrock-gateway-app's
-  action of the same name -- see bedrock-gateway-infra's
+  task definition revision. Same pattern as bedrock-runtime-gateway-app's
+  action of the same name -- see bedrock-runtime-gateway-infra's
   modules/authz_service for the ECR/ECS/OIDC-role Terraform this
   assumes already exists and applied.
 
@@ -11,7 +11,7 @@ inputs:
   aws-region:
     required: true
   deploy-role-arn:
-    description: IAM role this job assumes via GitHub OIDC (gha-authz-deploy-{dev,prod}, defined in bedrock-gateway-infra's environments/global).
+    description: IAM role this job assumes via GitHub OIDC (gha-authz-deploy-{dev,prod}, defined in bedrock-runtime-gateway-infra's environments/global).
     required: true
   ecr-repository:
     required: true

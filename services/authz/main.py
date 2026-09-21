@@ -76,7 +76,7 @@ def create_app(
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         # Never invented when absent (unlike request_id) -- a random
         # session_id wouldn't actually group anything. See
-        # bedrock-gateway-app's telemetry/logging.py for the same
+        # bedrock-runtime-gateway-app's telemetry/logging.py for the same
         # reasoning on its own session_id_ctx.
         session_id = request.headers.get("x-session-id") or ""
         # W3C traceparent, when gateway-api sent one (HttpIamTenantResolver
@@ -146,7 +146,7 @@ def create_app(
 
     @app.get("/v1/grants")
     async def list_grants() -> dict:
-        """Not part of the authorize contract -- lets bedrock-gateway-app's
+        """Not part of the authorize contract -- lets bedrock-runtime-gateway-app's
         admin API (GET /v1/admin/applications) enumerate configured
         grants the same way it already does against a local
         IamTenantResolver, via HttpIamTenantResolver.list_grants()."""

@@ -12,7 +12,7 @@ class Identity(BaseModel):
         description=(
             "Only 'aws_iam' is implemented (M12 MVP scope, plan section 5.3) -- the "
             "JWT/OIDC path's tenant/application/roles already come from the token's own "
-            "claims (bedrock-gateway-app's identity_from_claims), so there is no separate "
+            "claims (bedrock-runtime-gateway-app's identity_from_claims), so there is no separate "
             "principal-mapping lookup for it to extract yet."
         ),
     )

@@ -17,7 +17,7 @@
 # authentication time).
 
 authz_rules:
-  # Mirrors bedrock-gateway-app's own model_registry.yaml BLOCKED
+  # Mirrors bedrock-runtime-gateway-app's own model_registry.yaml BLOCKED
   # entry for this model (plan section 34.5) -- demonstrates a rule
   # actually operating at the resource/context layer, not just
   # identity, and shows why centralizing this here matters once more

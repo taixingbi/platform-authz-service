@@ -1,9 +1,9 @@
 # platform-authz-service
 
-M12 for the [bedrock-gateway](../bedrock-gateway-app) platform (see
+M12 for the [bedrock-gateway](../bedrock-runtime-gateway-app) platform (see
 `plan.md` Section 5). A standalone authorization service (PDP —
 policy decision point), called internally over HTTP by
-`bedrock-gateway-app` (the PEP — policy enforcement point), separating
+`bedrock-runtime-gateway-app` (the PEP — policy enforcement point), separating
 "is this caller allowed to do this" from "verify who this caller is"
 and "actually do it".
 
@@ -12,7 +12,7 @@ and "actually do it".
 Only the AWS_IAM/SigV4 path's principal mapping is extracted here —
 matching this milestone's own scoped-down plan (plan.md Section 5.3).
 The JWT/OIDC path's tenant_id/application_id/roles already come from
-the verified token's own claims (`bedrock-gateway-app`'s
+the verified token's own claims (`bedrock-runtime-gateway-app`'s
 `identity_from_claims`) — there's no separate mapping lookup to
 extract for it yet, so `POST /v1/authorize` only accepts
 `auth_type: "aws_iam"`.
@@ -29,7 +29,7 @@ regulated production environment, plan section 35.17),
 `default-deny-no-matching-rule-v1` instead: "known identity" and
 "authorized identity" are not the same thing, and an unmatched
 request in prod should be denied, not silently allowed through a
-default nobody explicitly wrote. `bedrock-gateway-app`'s own gateway
+default nobody explicitly wrote. `bedrock-runtime-gateway-app`'s own gateway
 now makes a real, resource/context-carrying call into this engine
 after the requested model is resolved (plan section 35.16), not just
 the identity-only call at authentication time -- so `resource`/
@@ -70,13 +70,13 @@ tenant_id/roles yet to evaluate rules against.
 
 `GET /v1/grants` — every configured principal -> grant (file +
 onboarding-provisioned DynamoDB, if configured), for
-`bedrock-gateway-app`'s admin API to enumerate the same way it already
+`bedrock-runtime-gateway-app`'s admin API to enumerate the same way it already
 does against a local resolver.
 
 ## Local development
 
 ```bash
-./scripts/sync-policies.sh   # pulls policies/iam_tenants.yaml from a sibling bedrock-gateway-policies checkout
+./scripts/sync-policies.sh   # pulls policies/iam_tenants.yaml from a sibling platform-policy-definitions checkout
 poetry install --with dev
 poetry run python -m services.authz.main
 poetry run python -m unittest discover -s services/authz/tests -t .
@@ -86,7 +86,7 @@ poetry run python -m unittest discover -s services/authz/tests -t .
 
 The very first "Deploy to dev" run failed on `iam:PassRole` (the
 deploy role could pass the ECS execution role but not the task role —
-fixed in `bedrock-gateway-infra`'s `environments/global`). The image
+fixed in `bedrock-runtime-gateway-infra`'s `environments/global`). The image
 had already built and pushed successfully *before* that failure, so
 re-running the same CI job hit ECR's immutable-tag protection:
 `tag invalid: ... already exists ... and cannot be overwritten`
@@ -98,14 +98,14 @@ Fixed by hand: `aws ecs register-task-definition` combining the
 already-pushed image with the (by-then-fixed) task definition's real
 env vars, then `aws ecs update-service` to roll it out — the same
 "the artifact already exists, just point the service at it" recovery
-`bedrock-gateway-app` and `bedrock-gateway-portal` needed for similar
+`bedrock-runtime-gateway-app` and `bedrock-gateway-portal` needed for similar
 mid-flight infra races earlier in this platform's history. If a
 deploy ever fails *after* the image push step, don't just re-run the
 job — check whether the image already exists in ECR first.
 
-## Integration with bedrock-gateway-app
+## Integration with bedrock-runtime-gateway-app
 
-`bedrock-gateway-app`'s `auth/aws_iam.py` gets a new
+`bedrock-runtime-gateway-app`'s `auth/aws_iam.py` gets a new
 `HttpIamTenantResolver` implementing the exact same `IamTenantResolver`
 Protocol `FileIamTenantResolver`/`DynamoDbIamTenantResolver`/
 `LayeredIamTenantResolver` already satisfy — wired in at `main.py`

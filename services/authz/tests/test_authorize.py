@@ -216,7 +216,7 @@ class AuthorizeSessionIdTests(unittest.TestCase):
     only reflects the right value *during* the request (main.py resets
     it in a finally before client.post() returns), so these tests
     attach a real JsonFormatter-backed handler and capture its actual
-    output live, the same pattern bedrock-gateway-app's
+    output live, the same pattern bedrock-runtime-gateway-app's
     PiiSafeLoggingTests uses -- asserting on the LogRecord after the
     fact (as assertLogs does) would see the contextvar already reset.
     """

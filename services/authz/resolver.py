@@ -1,13 +1,13 @@
 """Principal mapping (M12): maps a verified AWS_IAM principal ARN to
 the tenant_id/application_id/roles it should have -- the extracted
-half of bedrock-gateway-app's auth/aws_iam.py (FileIamTenantResolver +
+half of bedrock-runtime-gateway-app's auth/aws_iam.py (FileIamTenantResolver +
 DynamoDbIamTenantResolver + LayeredIamTenantResolver), ported here
 read-only. Signature verification (SigV4, done by API Gateway; JWT,
-done by bedrock-gateway-app itself) never happens here -- this module
+done by bedrock-runtime-gateway-app itself) never happens here -- this module
 only maps an already-trusted identity to a policy decision.
 
 Read-only, deliberately: onboarding-provisioned grants (M11) are
-written by bedrock-gateway-app's onboarding/provisioning.py into the
+written by bedrock-runtime-gateway-app's onboarding/provisioning.py into the
 same DynamoDB table this reads from. Two services writing to the same
 table would be a real consistency hazard; one writes, both read.
 """
@@ -22,7 +22,7 @@ import yaml
 
 class AuthzError(Exception):
     """Raised when a principal cannot be resolved. `code` maps to the
-    public error body, same convention as bedrock-gateway-app's
+    public error body, same convention as bedrock-runtime-gateway-app's
     AuthError."""
 
     def __init__(self, message: str, *, code: str):
@@ -48,7 +48,7 @@ class IamTenantResolver(Protocol):
 
 class FileIamTenantResolver:
     """Loads `policies/iam_tenants.yaml`'s `iam_principals` map once at
-    startup -- identical matching semantics to bedrock-gateway-app's
+    startup -- identical matching semantics to bedrock-runtime-gateway-app's
     resolver of the same name (exact ARN wins; a "*"-suffixed pattern
     matches any ARN sharing that prefix, for assumed-role session-name
     wildcards)."""
@@ -95,7 +95,7 @@ class FileIamTenantResolver:
 
 class DynamoDbIamTenantResolver:
     """Read-only view of the same `provisioned-principal-mappings`
-    table bedrock-gateway-app's onboarding/provisioning.py writes to
+    table bedrock-runtime-gateway-app's onboarding/provisioning.py writes to
     (M11) -- see this module's docstring for why it's read-only here."""
 
     def __init__(self, *, table_name: str, region: str):
@@ -135,7 +135,7 @@ class DynamoDbIamTenantResolver:
 
 class LayeredIamTenantResolver:
     """DynamoDB (onboarding-provisioned) checked first, file (hand-
-    configured) second -- same layering as bedrock-gateway-app's
+    configured) second -- same layering as bedrock-runtime-gateway-app's
     resolver of the same name."""
 
     def __init__(self, *, primary: IamTenantResolver, fallback: IamTenantResolver):

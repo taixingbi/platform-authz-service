@@ -1,6 +1,6 @@
 """Structured JSON logging for authz-service.
 
-Ported from bedrock-gateway-app's services/gateway/telemetry/logging.py --
+Ported from bedrock-runtime-gateway-app's services/gateway/telemetry/logging.py --
 same shape (one JSON object per line: ts -> level -> service -> environment
 -> logger -> message -> request_id -> trace_id -> span_id -> session_id ->
 <event-specific fields> -> error) so an authorize decision here and a

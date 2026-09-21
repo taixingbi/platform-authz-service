@@ -68,7 +68,7 @@ jobs:
         run: docker rm -f authz-ci
 
   # Plan section 35.9 (P2 production hardening) -- same reasoning as
-  # bedrock-gateway-app's own copy of these jobs: NOT in deploy-dev's
+  # bedrock-runtime-gateway-app's own copy of these jobs: NOT in deploy-dev's
   # `needs:`, findings land in the Security tab, a severity threshold
   # becoming deploy-blocking is a deliberate follow-up.
   codeql:
