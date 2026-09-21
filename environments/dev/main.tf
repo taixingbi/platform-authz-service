@@ -18,7 +18,7 @@ locals {
 
 # --- Cross-repo lookups (plan section 36) ----------------------------------
 #
-# Deliberately loose coupling to bedrock-runtime-gateway-infra, matching the
+# Deliberately loose coupling to bedrock-runtime-gateway, matching the
 # EXACT convention platform-edge-gateway's own environments/dev/main.tf
 # already established: name-based data source lookups, not
 # `terraform_remote_state`, not resource duplication. bedrock-gateway-
@@ -65,7 +65,7 @@ data "aws_dynamodb_table" "provisioned_principal_mappings" {
 # lookup on this page) -- the only way to reference an existing one is
 # its ARN directly. Confirmed live via `aws acm-pca list-certificate-
 # authorities` rather than guessed at. Real recurring cost
-# (~$400/month) already being paid for by bedrock-runtime-gateway-infra's own
+# (~$400/month) already being paid for by bedrock-runtime-gateway's own
 # aws_acmpca_certificate_authority.internal -- this repo does not
 # create a second one, only points at the existing one. Update this if
 # that CA is ever recreated (its ARN would change).
@@ -74,14 +74,14 @@ locals {
 }
 
 module "ecr_authz" {
-  source = "git::https://github.com/taixingbi/bedrock-runtime-gateway-infra.git//modules/ecr?ref=main"
+  source = "git::https://github.com/taixingbi/bedrock-runtime-gateway.git//infra/modules/ecr?ref=main"
 
   repository_name = local.name_prefix
   environment     = "dev"
 }
 
 module "authz_service" {
-  source = "git::https://github.com/taixingbi/bedrock-runtime-gateway-infra.git//modules/authz_service?ref=main"
+  source = "git::https://github.com/taixingbi/bedrock-runtime-gateway.git//infra/modules/authz_service?ref=main"
 
   name_prefix        = local.name_prefix
   environment        = "dev"
