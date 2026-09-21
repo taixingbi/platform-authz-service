@@ -193,9 +193,12 @@ data "aws_iam_policy_document" "authz_infra_apply" {
     resources = ["*"]
   }
   # IAM role names ARE predictable (gateway-{dev,prod}-authz-{execution,task}),
-  # so scoped by name -- deliberately narrower than the platform's
-  # infra_apply role, which also covers gha-* OIDC roles; this repo
-  # should never be able to touch those.
+  # so scoped by name. Also covers this repo's OWN CI roles
+  # (gha-authz-*, managed by this same ci_identity root -- the
+  # Terraform-ownership migration moved them here, so this role now
+  # needs to manage its own OIDC roles going forward) -- deliberately
+  # still NOT the wider gha-* namespace every other repo's own roles
+  # live under; this repo can only ever touch its own.
   statement {
     sid = "ManageAuthzServiceRoles"
     actions = [
@@ -204,7 +207,10 @@ data "aws_iam_policy_document" "authz_infra_apply" {
       "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies", "iam:TagRole", "iam:UntagRole", "iam:PassRole",
     ]
-    resources = ["arn:aws:iam::${local.account_id}:role/gateway-*-authz-*"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/gateway-*-authz-*",
+      "arn:aws:iam::${local.account_id}:role/gha-authz-*",
+    ]
   }
   # application-autoscaling's service-linked role.
   statement {

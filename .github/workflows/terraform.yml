@@ -5,17 +5,23 @@ on:
     branches: [main]
     paths:
       - "environments/**"
+      - "ci_identity/**"
       - ".github/workflows/terraform.yml"
   pull_request:
     branches: [main]
     paths:
       - "environments/**"
+      - "ci_identity/**"
       - ".github/workflows/terraform.yml"
 
 jobs:
   fmt-validate:
-    name: fmt + validate (dev)
+    name: fmt + validate (${{ matrix.dir }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [environments/dev, ci_identity]
     steps:
       - uses: actions/checkout@v4
 
@@ -24,29 +30,40 @@ jobs:
           terraform_version: "1.16.1"
 
       - name: terraform fmt -check
-        run: terraform fmt -check -recursive environments
+        run: terraform fmt -check -recursive .
 
       - name: terraform init (no backend, validate only)
-        working-directory: environments/dev
+        working-directory: ${{ matrix.dir }}
         run: terraform init -backend=false -input=false
 
       - name: terraform validate
-        working-directory: environments/dev
+        working-directory: ${{ matrix.dir }}
         run: terraform validate
 
   plan:
-    name: plan (dev)
+    name: plan (${{ matrix.dir }})
     needs: fmt-validate
     runs-on: ubuntu-latest
     environment: plan
     permissions:
       id-token: write
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [environments/dev, ci_identity]
+    # ci_identity's own config declares github_org itself (needed to
+    # pass to the shared module) -- not a secret (this account's public
+    # GitHub username), same as every repo's own ci_identity.
+    env:
+      TF_VAR_github_org: taixingbi
     steps:
       - uses: actions/checkout@v4
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
+          # Same plan role for both roots -- ci_identity IS this repo's
+          # own infra now too, just a separate Terraform state.
           role-to-assume: ${{ vars.AWS_AUTHZ_INFRA_PLAN_ROLE_ARN }}
           aws-region: us-east-1
 
@@ -55,15 +72,15 @@ jobs:
           terraform_version: "1.16.1"
 
       - name: terraform init
-        working-directory: environments/dev
+        working-directory: ${{ matrix.dir }}
         run: terraform init -input=false
 
       - name: terraform plan
-        working-directory: environments/dev
+        working-directory: ${{ matrix.dir }}
         run: terraform plan -input=false -lock=false
 
   apply-dev:
-    name: apply (dev)
+    name: apply (${{ matrix.dir }})
     needs: fmt-validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -71,11 +88,20 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [environments/dev, ci_identity]
+    env:
+      TF_VAR_github_org: taixingbi
     steps:
       - uses: actions/checkout@v4
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
+          # Same apply-dev role for both roots -- widened (see
+          # ci_identity/main.tf's ManageAuthzServiceRoles statement) to
+          # also manage this repo's own gha-authz-* CI roles.
           role-to-assume: ${{ vars.AWS_AUTHZ_INFRA_APPLY_DEV_ROLE_ARN }}
           aws-region: us-east-1
 
@@ -84,9 +110,9 @@ jobs:
           terraform_version: "1.16.1"
 
       - name: terraform init
-        working-directory: environments/dev
+        working-directory: ${{ matrix.dir }}
         run: terraform init -input=false
 
       - name: terraform apply
-        working-directory: environments/dev
+        working-directory: ${{ matrix.dir }}
         run: terraform apply -input=false -auto-approve
