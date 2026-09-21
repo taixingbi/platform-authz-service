@@ -187,6 +187,17 @@ data "aws_iam_policy_document" "authz_infra_apply" {
     actions   = ["dynamodb:Describe*", "dynamodb:ListTagsOfResource"]
     resources = ["*"]
   }
+  # Learned live wiring ci_identity into CI: this role never had a
+  # generic iam:Get*/List* grant (only authz_infra_plan did) -- fine
+  # while this role only ever wrote gateway-*-authz-*/gha-authz-* roles
+  # directly, but ci_identity's own module.github_oidc also reads the
+  # account-wide OIDC provider via data source during apply now, not
+  # just plan, and 403'd on iam:ListOpenIDConnectProviders.
+  statement {
+    sid       = "OidcProviderReadOnly"
+    actions   = ["iam:ListOpenIDConnectProviders", "iam:GetOpenIDConnectProvider"]
+    resources = ["*"]
+  }
   statement {
     sid       = "SnsReadOnly"
     actions   = ["sns:GetTopicAttributes", "sns:ListTopics", "sns:ListTagsForResource"]
