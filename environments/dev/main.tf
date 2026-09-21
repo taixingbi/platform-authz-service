@@ -53,6 +53,15 @@ data "aws_security_group" "gateway_task" {
   name = "gateway-dev-service"
 }
 
+# Phase 4 (2026-09-21, "direct cutover"): platform-control-plane's
+# backend_service also calls authz-service directly now, over the
+# same mTLS-verified path as gateway-api. Looked up by the fixed name
+# platform-control-plane/infra/modules/backend_service/main.tf's
+# aws_security_group.service resource already uses.
+data "aws_security_group" "control_plane_task" {
+  name = "gateway-dev-control-plane-service"
+}
+
 data "aws_sns_topic" "ops_alerts" {
   name = "gateway-dev-ops-alerts"
 }
@@ -93,7 +102,8 @@ module "authz_service" {
   private_ca_arn = local.private_ca_arn
   sns_topic_arn  = data.aws_sns_topic.ops_alerts.arn
 
-  caller_security_group_id = data.aws_security_group.gateway_task.id
+  caller_security_group_id               = data.aws_security_group.gateway_task.id
+  control_plane_caller_security_group_id = data.aws_security_group.control_plane_task.id
 
   # No image has been pushed on a first apply -- CI registers the real
   # task definition revision on its first deploy, same convention
