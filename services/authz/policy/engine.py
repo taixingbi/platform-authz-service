@@ -4,7 +4,7 @@ hardening).
 Before this: `main.py`'s own comment was accurate and honest -- "the
 one real rule this MVP enforces is: is the principal known at all,"
 with `action`/`resource`/`context` already on the wire contract
-(`models.py`'s `AuthorizeRequest`) but unused. This module is what
+(`api/models.py`'s `AuthorizeRequest`) but unused. This module is what
 makes them matter: an ordered list of versioned `PolicyRule`s, each
 with match conditions (action, tenant, roles, resource, data
 classification) and an effect (ALLOW/DENY) -- first match wins, no

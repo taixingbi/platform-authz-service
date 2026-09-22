@@ -18,7 +18,7 @@ extract for it yet, so `POST /v1/authorize` only accepts
 `auth_type: "aws_iam"`.
 
 Real versioned rule evaluation now exists (`services/authz/
-policy_engine.py`, plan section 35.4): a priority-ordered list of
+policy/engine.py`, plan section 35.4): a priority-ordered list of
 `PolicyRule`s (each with `action`, `tenant_id`, `roles_any_of`,
 `denied_resource_ids`, `max_data_classification`, `priority`),
 first-match-wins, loaded from `policies/authz_rules.yaml`. A resolved,

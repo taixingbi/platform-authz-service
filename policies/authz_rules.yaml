@@ -1,10 +1,10 @@
 # Versioned PDP rules (plan section 35.4). First matching rule (by
 # descending priority) wins; no match falls through to
-# default-allow-known-principal (services/authz/policy_engine.py's
+# default-allow-known-principal (services/authz/policy/engine.py's
 # DEFAULT_POLICY_ID) -- the same behavior this service had before this
 # file existed.
 #
-# Honest scope note (see policy_engine.py's module docstring): today's
+# Honest scope note (see policy/engine.py's module docstring): today's
 # real gateway-api traffic sends action="llm.invoke" with no resource/
 # context at all (the authorize() call happens during authentication,
 # before the requested model is resolved) -- neither rule below fires

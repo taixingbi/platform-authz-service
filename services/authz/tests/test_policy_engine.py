@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ..policy_engine import (
+from ..policy.engine import (
     DEFAULT_DENY_POLICY_ID,
     DEFAULT_POLICY_ID,
     DEFAULT_POLICY_VERSION,

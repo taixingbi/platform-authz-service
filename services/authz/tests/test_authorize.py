@@ -4,10 +4,10 @@ import unittest
 
 from starlette.testclient import TestClient
 
+from ..attributes.resolver import IamPrincipalGrant
 from ..config import load_settings
 from ..main import create_app
-from ..policy_engine import PolicyRule
-from ..resolver import IamPrincipalGrant
+from ..policy.engine import PolicyRule
 
 
 class FakeResolver:
@@ -15,7 +15,7 @@ class FakeResolver:
         self._grants = grants
 
     def resolve(self, principal_arn):
-        from ..resolver import AuthzError
+        from ..attributes.resolver import AuthzError
 
         try:
             return self._grants[principal_arn]
@@ -183,7 +183,7 @@ class AuthorizeTracingTests(unittest.TestCase):
     def test_extracts_incoming_traceparent(self):
         from unittest.mock import patch
 
-        from .. import main as main_module
+        from ..api import routes as routes_module
 
         client = _app(
             {
@@ -194,7 +194,7 @@ class AuthorizeTracingTests(unittest.TestCase):
         )
         traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
-        with patch.object(main_module, "extract", wraps=main_module.extract) as mock_extract:
+        with patch.object(routes_module, "extract", wraps=routes_module.extract) as mock_extract:
             client.post(
                 "/v1/authorize",
                 headers={"traceparent": traceparent},
@@ -211,10 +211,10 @@ class AuthorizeSessionIdTests(unittest.TestCase):
     one, ends up on the decision log line (see telemetry/logging.py's
     session_id_ctx) -- never invented when absent, unlike request_id.
 
-    session_id isn't an explicit log_event() field (see main.py) --
+    session_id isn't an explicit log_event() field (see api/routes.py) --
     JsonFormatter reads it from session_id_ctx at format() time, which
-    only reflects the right value *during* the request (main.py resets
-    it in a finally before client.post() returns), so these tests
+    only reflects the right value *during* the request (api/routes.py
+    resets it in a finally before client.post() returns), so these tests
     attach a real JsonFormatter-backed handler and capture its actual
     output live, the same pattern bedrock-runtime-gateway-app's
     PiiSafeLoggingTests uses -- asserting on the LogRecord after the

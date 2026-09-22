@@ -40,14 +40,14 @@ class Settings:
     # Plan section 35.4 -- versioned PDP rules. Empty/missing file
     # means no rules (every decision falls through to the
     # default-allow-known-principal behavior this service already had
-    # before policy_engine.py existed).
+    # before policy/engine.py existed).
     authz_rules_path: str
 
     # Plan section 35.17 (P0 production hardening): what a KNOWN,
     # correctly-resolved principal gets when no configured rule
     # matches their request at all. True (default) preserves this
     # service's original behavior -- migration-friendly, since
-    # rolling out policy_engine.py/authz_rules.yaml shouldn't
+    # rolling out policy/engine.py/authz_rules.yaml shouldn't
     # retroactively deny every tenant/action nobody has written a
     # rule for yet. A regulated production environment should set
     # this false: "known identity" and "authorized identity" are not
