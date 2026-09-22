@@ -71,7 +71,15 @@ tenant_id/roles yet to evaluate rules against.
 `GET /v1/grants` — every configured principal -> grant (file +
 onboarding-provisioned DynamoDB, if configured), for
 `bedrock-runtime-gateway-app`'s admin API to enumerate the same way it already
-does against a local resolver.
+does against a local resolver. Always live, uncached -- see below.
+
+`POST /v1/authorize`'s own principal lookup against the DynamoDB
+overlay is cached (`attributes/cache.py`'s `CachedIamTenantResolver`,
+bounded-TTL, `PRINCIPAL_GRANT_CACHE_TTL_S`, default 30s) -- every call
+resolves a principal on the hot path, so an uncached `GetItem` per
+request doesn't scale with traffic. Positive results only: an unknown
+principal is never cached, so a principal onboarded moments ago is
+never masked by a stale `UNKNOWN_IAM_PRINCIPAL` for up to the TTL.
 
 ## Local development
 

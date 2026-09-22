@@ -15,6 +15,13 @@ def _env_int(name: str, default: int) -> int:
     return int(raw)
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return float(raw)
+
+
 @dataclass(frozen=True)
 class Settings:
     aws_region: str
@@ -36,6 +43,16 @@ class Settings:
     # stay owned by bedrock-runtime-gateway-app's onboarding/provisioning.py.
     iam_tenants_path: str
     provisioned_principal_mappings_table_name: str  # empty -> file-only
+
+    # Bounded-TTL positive-only cache in front of the DynamoDB overlay's
+    # resolve() (attributes/cache.py's CachedIamTenantResolver) -- every
+    # /v1/authorize call hits this on the hot path, so an uncached
+    # GetItem per request adds needless DynamoDB cost/latency once real
+    # traffic volume shows up. Same 30s default as platform-control-
+    # plane's PolicySnapshotCache. Irrelevant when
+    # provisioned_principal_mappings_table_name is unset (file-only
+    # mode, already in-memory).
+    principal_grant_cache_ttl_s: float
 
     # Plan section 35.4 -- versioned PDP rules. Empty/missing file
     # means no rules (every decision falls through to the
@@ -74,6 +91,7 @@ def load_settings() -> Settings:
         provisioned_principal_mappings_table_name=os.environ.get(
             "PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME", ""
         ),
+        principal_grant_cache_ttl_s=_env_float("PRINCIPAL_GRANT_CACHE_TTL_S", 30.0),
         authz_rules_path=os.environ.get("AUTHZ_RULES_PATH", "policies/authz_rules.yaml"),
         default_allow_unmatched=os.environ.get("AUTHZ_DEFAULT_ALLOW", "true").lower() == "true",
         otel_exporter_otlp_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),

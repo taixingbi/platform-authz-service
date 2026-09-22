@@ -21,6 +21,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .api.routes import build_router
+from .attributes.cache import CachedIamTenantResolver
 from .attributes.resolver import (
     DynamoDbIamTenantResolver,
     FileIamTenantResolver,
@@ -49,9 +50,12 @@ def create_app(
         file_resolver = FileIamTenantResolver(settings.iam_tenants_path)
         if settings.provisioned_principal_mappings_table_name:
             iam_tenant_resolver = LayeredIamTenantResolver(
-                primary=DynamoDbIamTenantResolver(
-                    table_name=settings.provisioned_principal_mappings_table_name,
-                    region=settings.aws_region,
+                primary=CachedIamTenantResolver(
+                    DynamoDbIamTenantResolver(
+                        table_name=settings.provisioned_principal_mappings_table_name,
+                        region=settings.aws_region,
+                    ),
+                    ttl_s=settings.principal_grant_cache_ttl_s,
                 ),
                 fallback=file_resolver,
             )
