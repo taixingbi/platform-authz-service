@@ -87,14 +87,14 @@ locals {
 }
 
 module "ecr_authz" {
-  source = "git::https://github.com/taixingbi/bedrock-runtime-gateway.git//infra/modules/ecr?ref=main"
+  source = "git::https://github.com/taixingbi/eval-bedrock-gateway.git//infra/modules/ecr?ref=main"
 
   repository_name = local.name_prefix
   environment     = "dev"
 }
 
 module "authz_service" {
-  source = "git::https://github.com/taixingbi/bedrock-runtime-gateway.git//infra/modules/authz_service?ref=main"
+  source = "git::https://github.com/taixingbi/eval-bedrock-gateway.git//infra/modules/authz_service?ref=main"
 
   name_prefix        = local.name_prefix
   environment        = "dev"
